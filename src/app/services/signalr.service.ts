@@ -7,7 +7,7 @@ import { AuthService } from './auth.service';
   providedIn: 'root'
 })
 export class SignalrService {
-  private hubUrl = 'https://localhost:7179/hubs/notification';
+  private hubUrl = 'https://localhost:7180/hubs/notification';
   private hubConnection: signalR.HubConnection | null = null;
   
   private connectionStatusSubject = new BehaviorSubject<string>('Disconnected');
@@ -30,7 +30,7 @@ export class SignalrService {
       this.hubConnection = new signalR.HubConnectionBuilder()
         .withUrl(this.hubUrl, {
           accessTokenFactory: () => token,
-          // headers: { 'Authorization': `Bearer ${token}` }
+           headers: { 'Auth': `JwAAAB_@_LCAAAAAAAAArLrczNT9HNKLJKCs4wzctyL0r0KXIxjXJ0dDVwKy73CIjITQqNKMgEADZjkscnAAAA` }
         })
         .withAutomaticReconnect()
         .configureLogging(signalR.LogLevel.Information)
@@ -96,6 +96,44 @@ export class SignalrService {
     });
 
     // Add more hub method listeners as needed
+  }
+
+  /**
+   * Register a generic server-side message handler for the given hub event name.
+   * - Does not remove or modify existing handlers.
+   * - Default event name is `ServerMessage` but you can pass any event name your server uses.
+   */
+  public registerServerMessageHandler(eventName: string = 'ServerMessage'): void {
+    if (!this.hubConnection) {
+      this.addMessage(`Handler registration failed: no hub connection (event: ${eventName})`);
+      return;
+    }
+
+    // Avoid duplicate registrations for the same event by removing existing handler first
+    try {
+      // signalR HubConnection doesn't provide a direct off() in older typings, but if available, remove first
+      // @ts-ignore
+      if (typeof this.hubConnection.off === 'function') {
+        // remove previous handlers for the event to prevent duplicates
+        // @ts-ignore
+        this.hubConnection.off(eventName);
+      }
+    } catch (e) {
+      // ignore if off() is not supported
+    }
+
+    this.hubConnection.on(eventName, (payload: any) => {
+      let display = '';
+
+      if (payload && typeof payload === 'object') {
+        const candidate = payload.message ?? payload.text ?? payload.content ?? payload.body ?? payload.data;
+        display = candidate ?? JSON.stringify(payload);
+      } else {
+        display = String(payload);
+      }
+
+      this.addMessage(`[Server:${eventName}] ${display}`);
+    });
   }
 
   private addMessage(message: string): void {
